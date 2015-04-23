@@ -1,38 +1,5 @@
 #include "server.h"
 
-void response(Command *cmd, State *state)
-{
-  switch(lookup_cmd(cmd->command)){
-    case USER: ftp_user(cmd,state); break;
-    case PASS: ftp_pass(cmd,state); break;
-    case PASV: ftp_pasv(cmd,state); break;
-    case LIST: ftp_list(cmd,state); break;
-    case CWD:  ftp_cwd(cmd,state); break;
-    case PWD:  ftp_pwd(cmd,state); break;
-    case MKD:  ftp_mkd(cmd,state); break;
-    case RMD:  ftp_rmd(cmd,state); break;
-    case RETR: ftp_retr(cmd,state); break;
-    case STOR: ftp_stor(cmd,state); break;
-    case DELE: ftp_dele(cmd,state); break;
-    case SIZE: ftp_size(cmd,state); break;
-    case ABOR: ftp_abor(state); break;
-    case QUIT: ftp_quit(state); break;
-    case TYPE: ftp_type(cmd,state); break;
-    case NOOP:
-      if(state->logged_in){
-        state->message = "200 Nice to NOOP you!\n";
-      }else{
-        state->message = "530 NOOB hehe.\n";
-      }
-      write_state(state);
-      break;
-    default: 
-      state->message = "500 Unknown command\n";
-      write_state(state);
-      break;
-  }
-}
-
 void ftp_user(Command *cmd, State *state)
 {
   const int total_usernames = sizeof(usernames)/sizeof(char *);
@@ -215,10 +182,7 @@ void ftp_cwd(Command *cmd, State *state)
 
 }
 
-/* 
- * MKD command 
- * TODO: full path directory creation
- */
+/* MKD command */
 void ftp_mkd(Command *cmd, State *state)
 {
   if(state->logged_in){
@@ -228,9 +192,6 @@ void ftp_mkd(Command *cmd, State *state)
     memset(res,0,BSIZE);
     getcwd(cwd,BSIZE);
 
-    /* TODO: check if directory already exists with chdir? */
-
-    /* Absolute path */
     if(cmd->arg[0]=='/'){
       if(mkdir(cmd->arg,S_IRWXU)==0){
         strcat(res,"257 \"");
@@ -241,7 +202,6 @@ void ftp_mkd(Command *cmd, State *state)
         state->message = "550 Failed to create directory. Check path or permissions.\n";
       }
     }
-    /* Relative path */
     else{
       if(mkdir(cmd->arg,S_IRWXU)==0){
         sprintf(res,"257 \"%s/%s\" new directory created.\n",cwd,cmd->arg);
@@ -256,7 +216,7 @@ void ftp_mkd(Command *cmd, State *state)
   write_state(state);
 }
 
-/** RETR command */
+/* RETR */
 void ftp_retr(Command *cmd, State *state)
 {
 
@@ -309,7 +269,7 @@ void ftp_retr(Command *cmd, State *state)
   close(state->sock_pasv);
 }
 
-/** Handle STOR command. TODO: check permissions. */
+/* STOR */
 void ftp_stor(Command *cmd, State *state)
 {
   if(fork()==0){
@@ -322,7 +282,6 @@ void ftp_stor(Command *cmd, State *state)
     FILE *fp = fopen(cmd->arg,"w");
 
     if(fp==NULL){
-      /* TODO: write status message here! */
       perror("ftp_stor:fopen");
     }else if(state->logged_in){
       if(!(state->mode==SERVER)){
@@ -338,17 +297,10 @@ void ftp_stor(Command *cmd, State *state)
         state->message = "125 Data connection already open; transfer starting.\n";
         write_state(state);
 
-        /* Using splice function for file receiving.
-         * The splice() system call first appeared in Linux 2.6.17.
-         */
-
         while ((res = splice(connection, 0, pipefd[1], NULL, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE))>0){
           splice(pipefd[0], NULL, fd, 0, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE);
         }
 
-        /* TODO: signal with ABOR command to exit */
-
-        /* Internal error */
         if(res==-1){
           perror("ftp_stor: splice");
           exit(EXIT_SUCCESS);
@@ -370,7 +322,7 @@ void ftp_stor(Command *cmd, State *state)
 
 }
 
-/** ABOR command */
+/* ABOR */
 void ftp_abor(State *state)
 {
   if(state->logged_in){
@@ -383,10 +335,7 @@ void ftp_abor(State *state)
 
 }
 
-/** 
- * Handle TYPE command.
- * BINARY only at the moment.
- */
+/* TYPE */
 void ftp_type(Command *cmd,State *state)
 {
   if(state->logged_in){
@@ -394,7 +343,6 @@ void ftp_type(Command *cmd,State *state)
       state->message = "200 Switching to Binary mode.\n";
     }else if(cmd->arg[0]=='A'){
 
-      /* Type A must be always accepted according to RFC */
       state->message = "200 Switching to ASCII mode.\n";
     }else{
       state->message = "504 Command not implemented for that parameter.\n";
@@ -405,7 +353,7 @@ void ftp_type(Command *cmd,State *state)
   write_state(state);
 }
 
-/** Handle DELE command */
+/* DELE */
 void ftp_dele(Command *cmd,State *state)
 {
   if(state->logged_in){
@@ -420,7 +368,7 @@ void ftp_dele(Command *cmd,State *state)
   write_state(state);
 }
 
-/** Handle RMD */
+/* RMD */
 void ftp_rmd(Command *cmd, State *state)
 {
   if(!state->logged_in){
@@ -436,14 +384,12 @@ void ftp_rmd(Command *cmd, State *state)
 
 }
 
-/** Handle SIZE (RFC 3659) */
 void ftp_size(Command *cmd, State *state)
 {
   if(state->logged_in){
     struct stat statbuf;
     char filesize[128];
     memset(filesize,0,128);
-    /* Success */
     if(stat(cmd->arg,&statbuf)==0){
       sprintf(filesize, "213 %d\n", statbuf.st_size);
       state->message = filesize;
@@ -458,29 +404,21 @@ void ftp_size(Command *cmd, State *state)
 
 }
 
-/** 
- * Converts permissions to string. e.g. rwxrwxrwx 
- * @param perm Permissions mask
- * @param str_perm Pointer to string representation of permissions
- */
 void str_perm(int perm, char *str_perm)
 {
   int curperm = 0;
   int flag = 0;
   int read, write, exec;
   
-  /* Flags buffer */
   char fbuff[3];
 
   read = write = exec = 0;
   
   int i;
   for(i = 6; i>=0; i-=3){
-    /* Explode permissions of user, group, others; starting with users */
     curperm = ((perm & ALLPERMS) >> i ) & 0x7;
     
     memset(fbuff,0,3);
-    /* Check rwx flags for each*/
     read = (curperm >> 2) & 0x1;
     write = (curperm >> 1) & 0x1;
     exec = (curperm >> 0) & 0x1;

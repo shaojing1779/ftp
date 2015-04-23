@@ -94,8 +94,7 @@ int accept_connection(int);
 void *start_routine(void* arg);
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread);
 
-/* Commands handle functions*/
-void response(Command *, State *);
+/* void response(Command *, State *); */
 void ftp_user(Command *, State *);
 void ftp_pass(Command *, State *);
 void ftp_pwd(Command *, State *);
@@ -111,5 +110,4 @@ void ftp_size(Command *, State *);
 void ftp_quit(State *);
 void ftp_type(Command *, State *);
 void ftp_abor(State *);
-
 void str_perm(int, char *);

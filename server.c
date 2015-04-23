@@ -53,7 +53,37 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
         printf("User %s sent command: %s\n", (state->username==0)?"unknown":state->username, buffer);
         parse_command(buffer,cmd);
         state->connection = connectfd;
-        response(cmd, state);
+        //response(cmd, state);
+        switch(lookup_cmd(cmd->command)){
+            case USER: ftp_user(cmd,state); break;
+            case PASS: ftp_pass(cmd,state); break;
+            case PASV: ftp_pasv(cmd,state); break;
+            case LIST: ftp_list(cmd,state); break;
+            case CWD:  ftp_cwd(cmd,state); break;
+            case PWD:  ftp_pwd(cmd,state); break;
+            case MKD:  ftp_mkd(cmd,state); break;
+            case RMD:  ftp_rmd(cmd,state); break;
+            case RETR: ftp_retr(cmd,state); break;
+            case STOR: ftp_stor(cmd,state); break;
+            case DELE: ftp_dele(cmd,state); break;
+            case SIZE: ftp_size(cmd,state); break;
+            case ABOR: ftp_abor(state); break;
+            case QUIT: ftp_quit(state); break;
+            case TYPE: ftp_type(cmd,state); break;
+            case NOOP:
+                       if(state->logged_in){
+                           state->message = "200 Nice to NOOP you!\n";
+                       }else{
+                           state->message = "530 NOOB hehe.\n";
+                       }   
+                       write_state(state);
+                       break;
+            default: 
+                       state->message = "500 Unknown command\n";
+                       write_state(state);
+                       break;
+        }
+
     }
     close(connectfd);
 }
