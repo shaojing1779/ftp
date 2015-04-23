@@ -18,6 +18,7 @@
 
 #define BSIZE 1024
 #endif
+
 typedef struct Port
 {
   int p1;
@@ -111,3 +112,4 @@ void ftp_quit(State *);
 void ftp_type(Command *, State *);
 void ftp_abor(State *);
 void str_perm(int, char *);
+
