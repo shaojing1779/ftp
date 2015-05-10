@@ -3,12 +3,12 @@ Date:2014-04-23</br>
 一个简单的多线程并发FTP服务器程序，仅供学习使用 </br>
 
 ######编译:
-Makefile:
-`all: ftp`
-`ftp: server.c handles.c`
-`    gcc -o ftp server.c handles.c -lpthread`
-`clean:`
-`    rm -rf *.o ftp`
+Makefile:</br>
+`all: ftp`</br>
+`ftp: server.c handles.c`</br>
+`    gcc -o ftp server.c handles.c -lpthread`</br>
+`clean:`</br>
+`    rm -rf *.o ftp`</br>
 
 ~$`make` </br>
 生成`./ftp`可执行服务器端程序</br>
