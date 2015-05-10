@@ -2,11 +2,11 @@ Date:2014-04-23</br>
 此项目为大学三年级的《UNIX网络程序设计》课程的课程设计</br>
 一个简单的多线程并发FTP服务器程序，仅供学习使用 </br>
 
-######编译:</br>
+######编译:
 ~$make </br>
 
-######链接:</br>
-RFC:</br> 
+######链接:
+RFC:
 * http://www.w3.org/Protocols/rfc959/ </br>
 * https://www.ietf.org/rfc/rfc959.txt </br>
 
