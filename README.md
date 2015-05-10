@@ -7,5 +7,6 @@ Date:2014-04-23<br />
 
 ###链接
 RFC:http://www.w3.org/Protocols/rfc959/ <br />
-> > https://www.ietf.org/rfc/rfc959.txt <br />
+        https://www.ietf.org/rfc/rfc959.txt
+
 IBM Developerworks: http://www.ibm.com/developerworks/cn/linux/l-cn-socketftp/<br />
