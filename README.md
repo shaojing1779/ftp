@@ -4,11 +4,11 @@ Date:2014-04-23</br>
 
 ######编译:
 Makefile:</br>
-`all: ftp`</br>
-`ftp: server.c handles.c`</br>
-`    gcc -o ftp server.c handles.c -lpthread`</br>
-`clean:`</br>
-`    rm -rf *.o ftp`</br>
+all: ftp
+ftp: server.c handles.c
+    gcc -o ftp server.c handles.c -lpthread
+clean:
+    rm -rf *.o ftp
 
 ~$`make` </br>
 生成`./ftp`可执行服务器端程序</br>
