@@ -70,6 +70,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
             case ABOR: ftp_abor(state); break;
             case QUIT: ftp_quit(state); break;
             case TYPE: ftp_type(cmd,state); break;
+            case CDUP: ftp_cdup(cmd,state); break;
             case NOOP:
                        if(state->logged_in){
                            state->message = "200 Nice to NOOP you!\n";
@@ -146,7 +147,6 @@ int lookup(char *needle, const char **haystack, int count)
     }
     return -1;
 }
-
 
 void write_state(State *state)
 {

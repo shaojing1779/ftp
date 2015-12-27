@@ -71,7 +71,7 @@ typedef enum cmdlist
 { 
   ABOR, CWD, DELE, LIST, MDTM, MKD, NLST, PASS, PASV,
   PORT, PWD, QUIT, RETR, RMD, RNFR, RNTO, SITE, SIZE,
-  STOR, TYPE, USER, NOOP
+  STOR, TYPE, CDUP, USER, NOOP
 } cmdlist;
 
 /* String mappings for cmdlist */
@@ -79,7 +79,7 @@ static const char *cmdlist_str[] =
 {
   "ABOR", "CWD", "DELE", "LIST", "MDTM", "MKD", "NLST", "PASS", "PASV",
   "PORT", "PWD", "QUIT", "RETR", "RMD", "RNFR", "RNTO", "SITE", "SIZE",
-  "STOR", "TYPE", "USER", "NOOP" 
+  "STOR", "TYPE", "CDUP", "USER", "NOOP" 
 };
 /* User nome */
 static const char *usernames[] = {"ftp", "anonymous","lab"};
@@ -110,6 +110,7 @@ void ftp_dele(Command *, State *);
 void ftp_size(Command *, State *);
 void ftp_quit(State *);
 void ftp_type(Command *, State *);
+void ftp_cdup(Command *, State *);
 void ftp_abor(State *);
 void str_perm(int, char *);
 

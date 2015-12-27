@@ -84,7 +84,7 @@ void ftp_list(Command *cmd, State *state)
     DIR *dp = opendir(cwd);
 
     if(!dp){
-      state->message = "550 Failed to open directory.\n";
+      state->message = "551 Failed to open directory.\n";
     }else{
       if(state->mode == SERVER){
 
@@ -170,6 +170,9 @@ void ftp_pwd(Command *cmd, State *state)
 void ftp_cwd(Command *cmd, State *state)
 {
   if(state->logged_in){
+	printf("$HELLO\n");
+	printf("$CWD:%s\n",cmd->arg);
+	printf("$HELLO\n");
     if(chdir(cmd->arg)==0){
       state->message = "250 Directory successfully changed.\n";
     }else{
@@ -351,6 +354,22 @@ void ftp_type(Command *cmd,State *state)
     state->message = "530 Please login with USER and PASS.\n";
   }
   write_state(state);
+}
+
+/* CDUP */
+void ftp_cdup(Command *cmd, State *state) {
+
+  if(state->logged_in){
+    if(chdir("..")==0){
+      state->message = "250 Directory successfully changed.\n";
+    }else{
+      state->message = "550 Failed to change directory.\n";
+    }
+  }else{
+    state->message = "500 Login with USER and PASS.\n";
+  }
+  write_state(state);
+
 }
 
 /* DELE */
