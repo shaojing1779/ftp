@@ -11,7 +11,8 @@ void server(int port)
     while(1){
         if ((connection = accept(sock, (struct sockaddr*) &client_address,&len)) == -1) {
             perror("accept Error\n");
-            exit(1);
+			continue;
+            //exit(1);
         }
         Arg *arg = (void*)malloc(sizeof(Arg));
         arg->connfd = connection;
@@ -19,7 +20,8 @@ void server(int port)
         memcpy((void *)&arg->client, &client_address, sizeof(client_address));
         if (pthread_create(&thread, NULL, start_routine, (void*)arg)) {
             perror("Pthread_create() error");
-            exit(1);
+			continue;
+            //exit(1);
         }
     }
 }
@@ -31,8 +33,20 @@ void *start_routine(void* arg)
     pthread_t thread = pthread_self();
     process_cli(info->connfd, info->client, thread);
     free(arg);
-    pthread_exit(NULL);
 }
+/*ignore pipe*/
+void ignore_pipe()
+{
+    struct sigaction sig;
+
+    memset(&sig,0,sizeof(struct sigaction));
+
+    sig.sa_handler = SIG_IGN;
+    sig.sa_flags = 0;
+    sigemptyset(&sig.sa_mask);
+    sigaction(SIGPIPE,&sig,NULL);
+}
+
 /*Process Request*/
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
 {
@@ -50,10 +64,13 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
         memset(buffer, 0, BSIZE);
         memset(cmd, 0, sizeof(*cmd));
         num = read(connectfd, buffer, BSIZE);
-        printf("User %s sent command: %s\n", (state->username==0)?"unknown":state->username, buffer);
+
+		if(num <= 0) break;
+
+        printf("User %s sent command: %s recv_size=%d\n", (state->username==0)?"unknown":state->username, buffer, num);
         parse_command(buffer,cmd);
         state->connection = connectfd;
-        //response(cmd, state);
+
         switch(lookup_cmd(cmd->command)){
             case USER: ftp_user(cmd,state); break;
             case PASS: ftp_pass(cmd,state); break;
@@ -193,7 +210,34 @@ int main(int argc, char *argv[])
     printf("User: %s\n", pwd->pw_name);
     printf("Port: %d\n", port);
     printf("----------------------------------------------\n");
+	ignore_pipe();
     server(port);
+#if 0
+    int fd = open("/dev/null", O_RDWR );
+	printf("fd=%d\n", fd);
+	if(fd != -1)
+	{
+		//dup2(fd, 0);
+		//dup2(fd, 1);
+		//dup2(fd, 2);
+		dup2(1, fd);
+	}
+
+	char* buf = "Tom and Frodo";
+	size_t buf_len = strlen(buf);
+	ssize_t tc = write(fd, (const void *)buf, buf_len);
+	printf("\ntc=%d\n", tc);
+	tc = write(fd, (const void *)buf, buf_len);
+	printf("\ntc=%d\n", tc);
+	close(fd);
+	tc = write(fd, (const void *)buf, buf_len);
+	printf("\ntc=%d\n", tc);
+	tc = write(fd, (const void *)buf, buf_len);
+	printf("\ntc=%d\n", tc);
+	tc = write(fd, (const void *)buf, buf_len);
+	printf("\ntc=%d\n", tc);
+#endif
+	
     return 0;
 }
 

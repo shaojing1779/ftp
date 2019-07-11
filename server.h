@@ -94,6 +94,7 @@ int accept_connection(int);
 /*Thread functions*/
 void *start_routine(void* arg);
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread);
+void ignore_pipe();
 
 /* void response(Command *, State *); */
 void ftp_user(Command *, State *);
