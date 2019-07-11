@@ -56,6 +56,8 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
     State *state = malloc(sizeof(State));
     memset(buffer,0,BSIZE);
 
+	int tid = pthread_self();
+
     char welcome[BSIZE] = "220 ";
     strcat(welcome, "Welcome to FTP service.\n");
     write(connectfd, welcome, strlen(welcome));
@@ -67,7 +69,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
 
 		if(num <= 0) break;
 
-        printf("User %s sent command: %s recv_size=%d\n", (state->username==0)?"unknown":state->username, buffer, num);
+        printf("[%d] User %s sent command: %s recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
         parse_command(buffer,cmd);
         state->connection = connectfd;
 
@@ -212,31 +214,6 @@ int main(int argc, char *argv[])
     printf("----------------------------------------------\n");
 	ignore_pipe();
     server(port);
-#if 0
-    int fd = open("/dev/null", O_RDWR );
-	printf("fd=%d\n", fd);
-	if(fd != -1)
-	{
-		//dup2(fd, 0);
-		//dup2(fd, 1);
-		//dup2(fd, 2);
-		dup2(1, fd);
-	}
-
-	char* buf = "Tom and Frodo";
-	size_t buf_len = strlen(buf);
-	ssize_t tc = write(fd, (const void *)buf, buf_len);
-	printf("\ntc=%d\n", tc);
-	tc = write(fd, (const void *)buf, buf_len);
-	printf("\ntc=%d\n", tc);
-	close(fd);
-	tc = write(fd, (const void *)buf, buf_len);
-	printf("\ntc=%d\n", tc);
-	tc = write(fd, (const void *)buf, buf_len);
-	printf("\ntc=%d\n", tc);
-	tc = write(fd, (const void *)buf, buf_len);
-	printf("\ntc=%d\n", tc);
-#endif
 	
     return 0;
 }
