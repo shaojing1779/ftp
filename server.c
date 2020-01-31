@@ -12,7 +12,6 @@ void server(int port)
         if ((connection = accept(sock, (struct sockaddr*) &client_address,&len)) == -1) {
             perror("accept Error\n");
 			continue;
-            //exit(1);
         }
         Arg *arg = (void*)malloc(sizeof(Arg));
         arg->connfd = connection;
@@ -21,7 +20,6 @@ void server(int port)
         if (pthread_create(&thread, NULL, start_routine, (void*)arg)) {
             perror("Pthread_create() error");
 			continue;
-            //exit(1);
         }
     }
 }
@@ -69,7 +67,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
 
 		if(num <= 0) break;
 
-        printf("[%d] User %s sent command: %s recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
+        printf("[%d] USER:%s COMMAND:[%s] recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
         parse_command(buffer,cmd);
         state->connection = connectfd;
 
@@ -77,6 +75,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
             case USER: ftp_user(cmd,state); break;
             case PASS: ftp_pass(cmd,state); break;
             case PASV: ftp_pasv(cmd,state); break;
+            case PORT: ftp_port(cmd,state); break;
             case LIST: ftp_list(cmd,state); break;
             case CWD:  ftp_cwd(cmd,state); break;
             case PWD:  ftp_pwd(cmd,state); break;
@@ -90,6 +89,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
             case QUIT: ftp_quit(state); break;
             case TYPE: ftp_type(cmd,state); break;
             case CDUP: ftp_cdup(cmd,state); break;
+            case SYST: ftp_syst(state); break;
             case NOOP:
                        if(state->logged_in){
                            state->message = "200 Nice to NOOP you!\n";
@@ -103,7 +103,6 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
                        write_state(state);
                        break;
         }
-
     }
     close(connectfd);
 }
@@ -152,6 +151,31 @@ void getip(int sock, int *ip)
     }
 }
 
+int32_t conn_cli(char* ip, int port)
+{
+    int32_t ret = 0;
+    int32_t fd;
+    struct sockaddr_in server;
+    do
+    {
+        if((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
+            fprintf(stderr, "FTP: Create socket error...\n");
+            ret = -1;
+            break;
+        }
+        memset(&server, 0, sizeof(server));
+        server.sin_family = AF_INET;
+        server.sin_port = htons(port);
+        server.sin_addr.s_addr = inet_addr(ip);
+        ret = connect(fd, (struct sockaddr *)&server, sizeof(struct sockaddr));
+        if(ret < 0){
+            fprintf(stderr, "FTP: Connect error...\n");
+            ret = -1;
+            break;
+        }
+    }while(0);
+    return ret;
+}
 
 int lookup_cmd(char *cmd){
     const int cmdlist_count = sizeof(cmdlist_str)/sizeof(char *);
@@ -190,7 +214,7 @@ int main(int argc, char *argv[])
     int port = 0, i = 0;
     if(argc != 2) {
         printf("Usage: %s <Server port>\n", argv[0]);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     /*String to int*/
     for(i = 0; i < strlen(argv[1]); i++) {
@@ -212,7 +236,7 @@ int main(int argc, char *argv[])
     printf("User: %s\n", pwd->pw_name);
     printf("Port: %d\n", port);
     printf("----------------------------------------------\n");
-	ignore_pipe();
+    ignore_pipe();
     server(port);
 	
     return 0;

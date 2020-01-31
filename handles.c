@@ -27,6 +27,51 @@ void ftp_pass(Command *cmd, State *state)
   write_state(state);
 }
 
+/* PORT */
+void ftp_port(Command *cmd, State *state)
+{
+    if(state->logged_in){
+        int32_t ip[4];
+        char ip_str[255];
+        Port *port = malloc(sizeof(Port));
+        gen_port(port);
+        getip(state->connection,ip);
+        sprintf(ip_str, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+        printf("ip:%s, port:%d\n", ip_str, 256*port->p1+port->p2);
+
+        /* Bind client address*/
+        struct sockaddr_in cli_addr;
+        memset(&cli_addr, 0, sizeof(cli_addr));
+        cli_addr.sin_family = AF_INET;
+        cli_addr.sin_port = htons(20);
+        int32_t sockfd =socket(AF_INET,SOCK_STREAM,0);
+        if(sockfd < 0){
+            fprintf(stderr, "FTP: Create socket error...\n");
+            pthread_exit(NULL);
+        }
+        int32_t reuse = 1;
+        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int32_t));
+        if((bind(sockfd,(struct sockaddr*)&cli_addr,sizeof(cli_addr)))<0){
+            fprintf(stderr, "FTP: Can not bind...\n");
+            pthread_exit(NULL);
+        }
+
+        /* Connect client port */
+        int32_t ret = conn_cli(ip_str, (256*port->p1)+port->p2);
+        if(ret != 0)
+        {
+            pthread_exit(NULL);
+        }
+        state->message = "200 PORT sucess!";
+        state->mode = CLIENT;
+        puts(state->message);
+    }else{
+      state->message = "530 Please login with USER and PASS.\n";
+      printf("%s",state->message);
+    }
+    write_state(state);
+}
+
 /* PASV */
 void ftp_pasv(Command *cmd, State *state)
 {
@@ -109,7 +154,7 @@ void ftp_list(Command *cmd, State *state)
                 (entry->d_type==DT_DIR)?'d':'-',
                 perms,
                 statbuf.st_nlink,
-                statbuf.st_uid, 
+                statbuf.st_uid,
                 statbuf.st_gid,
                 statbuf.st_size,
                 timebuff,
@@ -246,7 +291,7 @@ void ftp_retr(Command *cmd, State *state)
             
             if(sent_total != stat_buf.st_size){
               perror("ftp_retr:sendfile");
-              exit(EXIT_SUCCESS);
+              pthread_exit(NULL);
             }
 
             state->message = "226 File send OK.\n";
@@ -266,7 +311,7 @@ void ftp_retr(Command *cmd, State *state)
     close(fd);
     close(connection);
     write_state(state);
-    exit(EXIT_SUCCESS);
+    pthread_exit(NULL);
   }
   state->mode = NORMAL;
   close(state->sock_pasv);
@@ -306,7 +351,7 @@ void ftp_stor(Command *cmd, State *state)
 
         if(res==-1){
           perror("ftp_stor: splice");
-          exit(EXIT_SUCCESS);
+          pthread_exit(NULL);
         }else{
           state->message = "226 File send OK.\n";
         }
@@ -318,7 +363,7 @@ void ftp_stor(Command *cmd, State *state)
     }
     close(connection);
     write_state(state);
-    exit(EXIT_SUCCESS);
+    pthread_exit(NULL);
   }
   state->mode = NORMAL;
   close(state->sock_pasv);
@@ -370,6 +415,20 @@ void ftp_cdup(Command *cmd, State *state) {
   }
   write_state(state);
 
+}
+
+/* SYST */
+void ftp_syst(State *state) {
+    struct utsname kernel_info;
+    int ret = uname(&kernel_info);
+    if (ret == 0) {
+        char kversion[512] = { 0 };
+        sprintf(kversion, "200 %s-%s%s\n", kernel_info.release, kernel_info.machine, kernel_info.version);
+        state->message = kversion;
+    } else {
+        state->message = "425 Get system info error.\n";
+    }
+    write_state(state);
 }
 
 /* DELE */

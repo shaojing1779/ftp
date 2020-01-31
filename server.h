@@ -15,6 +15,7 @@
 #include <time.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/utsname.h>
 
 #define BSIZE 1024
 #endif
@@ -38,10 +39,7 @@ typedef struct State
   char *message;
   /* Commander connection */
   int connection;
-  /* Socket for passive connection (must be accepted later) */
   int sock_pasv;
-  /* Transfer process id */
-  int tr_pid;
 } State;
 
 typedef struct Arg
@@ -71,7 +69,7 @@ typedef enum cmdlist
 { 
   ABOR, CWD, DELE, LIST, MDTM, MKD, NLST, PASS, PASV,
   PORT, PWD, QUIT, RETR, RMD, RNFR, RNTO, SITE, SIZE,
-  STOR, TYPE, CDUP, USER, NOOP
+  STOR, TYPE, CDUP, USER, NOOP, SYST
 } cmdlist;
 
 /* String mappings for cmdlist */
@@ -79,7 +77,7 @@ static const char *cmdlist_str[] =
 {
   "ABOR", "CWD", "DELE", "LIST", "MDTM", "MKD", "NLST", "PASS", "PASV",
   "PORT", "PWD", "QUIT", "RETR", "RMD", "RNFR", "RNTO", "SITE", "SIZE",
-  "STOR", "TYPE", "CDUP", "USER", "NOOP" 
+  "STOR", "TYPE", "CDUP", "USER", "NOOP", "SYST"
 };
 /* User nome */
 static const char *usernames[] = {"ftp", "anonymous","lab"};
@@ -95,6 +93,7 @@ int accept_connection(int);
 void *start_routine(void* arg);
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread);
 void ignore_pipe();
+int32_t conn_cli(char*, int);
 
 /* void response(Command *, State *); */
 void ftp_user(Command *, State *);
@@ -113,5 +112,8 @@ void ftp_quit(State *);
 void ftp_type(Command *, State *);
 void ftp_cdup(Command *, State *);
 void ftp_abor(State *);
+void ftp_port(Command *, State *);
+void ftp_syst(State *);
+
 void str_perm(int, char *);
 
