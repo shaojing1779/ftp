@@ -31,43 +31,32 @@ void ftp_pass(Command *cmd, State *state)
 void ftp_port(Command *cmd, State *state)
 {
     if(state->logged_in){
-        int32_t ip[4];
-        char ip_str[255];
-        Port *port = malloc(sizeof(Port));
-        gen_port(port);
-        getip(state->connection,ip);
-        sprintf(ip_str, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-        printf("ip:%s, port:%d\n", ip_str, 256*port->p1+port->p2);
-
-        /* Bind client address*/
-        struct sockaddr_in cli_addr;
-        memset(&cli_addr, 0, sizeof(cli_addr));
-        cli_addr.sin_family = AF_INET;
-        cli_addr.sin_port = htons(20);
-        int32_t sockfd =socket(AF_INET,SOCK_STREAM,0);
-        if(sockfd < 0){
-            fprintf(stderr, "FTP: Create socket error...\n");
+        char ip_addr[32];
+        uint8_t tcp_addr[6] = {0, 0, 0, 0, 0, 0};
+        if(cmd->arg == NULL){
+            fprintf(stderr, "FTP: Get Arg error.\n");
             pthread_exit(NULL);
         }
-        int32_t reuse = 1;
-        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int32_t));
-        if((bind(sockfd,(struct sockaddr*)&cli_addr,sizeof(cli_addr)))<0){
-            fprintf(stderr, "FTP: Can not bind...\n");
+        char *pNext;
+        pNext = strtok(cmd->arg, ",");
+        int32_t count = 0;
+        while(pNext != NULL) {
+            tcp_addr[count] = atoi(pNext);
+            count++;
+            pNext = strtok(NULL,",");
+        }
+        sprintf(ip_addr, "%d.%d.%d.%d", tcp_addr[0], tcp_addr[1], tcp_addr[2], tcp_addr[3]);
+        /* Connect to client */
+        state->sock_port = conn_cli(ip_addr, 256 * tcp_addr[4] + tcp_addr[5]);
+        if(state->sock_port < 0) {
+            state->message = "501 Connect error.\n";
+            fprintf(stderr, "FTP: Connect error.\n");
             pthread_exit(NULL);
         }
-
-        /* Connect client port */
-        int32_t ret = conn_cli(ip_str, (256*port->p1)+port->p2);
-        if(ret != 0)
-        {
-            pthread_exit(NULL);
-        }
-        state->message = "200 PORT sucess!";
+        state->message = "200 PORT SUCCESS!\n";
         state->mode = CLIENT;
-        puts(state->message);
     }else{
-      state->message = "530 Please login with USER and PASS.\n";
-      printf("%s",state->message);
+        state->message = "530 Please login with USER and PASS.\n";
     }
     write_state(state);
 }
@@ -75,111 +64,135 @@ void ftp_port(Command *cmd, State *state)
 /* PASV */
 void ftp_pasv(Command *cmd, State *state)
 {
-  if(state->logged_in){
-    int ip[4];
-    char buff[255];
-    char *response = "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\n";
-    Port *port = malloc(sizeof(Port));
-    gen_port(port);
-    getip(state->connection,ip);
+    if(state->logged_in){
+        int ip[4];
+        char buff[255];
+        char *response = "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\n";
+        Port *port = malloc(sizeof(Port));
+        gen_port(port);
+        getip(state->connection,ip);
 
-    /* Close previous passive socket? */
-    close(state->sock_pasv);
+        /* Close previous passive socket? */
+        close(state->sock_pasv);
 
-    /* Start listening here, but don't accept the connection */
-    state->sock_pasv = create_socket((256*port->p1)+port->p2);
-    printf("port: %d\n",256*port->p1+port->p2);
-    sprintf(buff,response,ip[0],ip[1],ip[2],ip[3],port->p1,port->p2);
-    state->message = buff;
-    state->mode = SERVER;
-    puts(state->message);
+        /* Start listening here, but don't accept the connection */
+        state->sock_pasv = create_socket((256*port->p1)+port->p2);
+        printf("port: %d\n",256*port->p1+port->p2);
+        sprintf(buff,response,ip[0],ip[1],ip[2],ip[3],port->p1,port->p2);
+        state->message = buff;
+        state->mode = SERVER;
+        puts(state->message);
 
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-    printf("%s",state->message);
-  }
-  write_state(state);
+    }else{
+        state->message = "530 Please login with USER and PASS.\n";
+        printf("%s",state->message);
+    }
+    write_state(state);
 }
 
 /** LIST command */
 void ftp_list(Command *cmd, State *state)
 {
-  if(state->logged_in==1){
-    struct dirent *entry;
-    struct stat statbuf;
-    struct tm *time;
-    char timebuff[80], current_dir[BSIZE];
-    int connection;
-    time_t rawtime;
+    if(state->logged_in==1){
+        struct dirent *entry;
+        struct stat statbuf;
+        struct tm *time;
+        char timebuff[80], current_dir[BSIZE];
+        int connection;
+        time_t rawtime;
 
-    /* TODO: dynamic buffering maybe? */
-    char cwd[BSIZE], cwd_orig[BSIZE];
-    memset(cwd,0,BSIZE);
-    memset(cwd_orig,0,BSIZE);
-    
-    /* Later we want to go to the original path */
-    getcwd(cwd_orig,BSIZE);
-    
-    /* Just chdir to specified path */
-    if(strlen(cmd->arg)>0&&cmd->arg[0]!='-'){
-      chdir(cmd->arg);
-    }
-    
-    getcwd(cwd,BSIZE);
-    DIR *dp = opendir(cwd);
+        /* TODO: dynamic buffering maybe? */
+        char cwd[BSIZE], cwd_orig[BSIZE];
+        memset(cwd,0,BSIZE);
+        memset(cwd_orig,0,BSIZE);
 
-    if(!dp){
-      state->message = "551 Failed to open directory.\n";
-    }else{
-      if(state->mode == SERVER){
+        /* Later we want to go to the original path */
+        getcwd(cwd_orig,BSIZE);
 
-        connection = accept_connection(state->sock_pasv);
-        state->message = "150 Here comes the directory listing.\n";
-        puts(state->message);
-
-        while(entry=readdir(dp)){
-          if(stat(entry->d_name,&statbuf)==-1){
-            fprintf(stderr, "FTP: Error reading file stats...\n");
-          }else{
-            char *perms = malloc(9);
-            memset(perms,0,9);
-
-            /* Convert time_t to tm struct */
-            rawtime = statbuf.st_mtime;
-            time = localtime(&rawtime);
-            strftime(timebuff,80,"%b %d %H:%M",time);
-            str_perm((statbuf.st_mode & ALLPERMS), perms);
-            dprintf(connection,
-                "%c%s %5d %4d %4d %8d %s %s\r\n", 
-                (entry->d_type==DT_DIR)?'d':'-',
-                perms,
-                statbuf.st_nlink,
-                statbuf.st_uid,
-                statbuf.st_gid,
-                statbuf.st_size,
-                timebuff,
-                entry->d_name);
-          }
+        /* Just chdir to specified path */
+        if(strlen(cmd->arg)>0&&cmd->arg[0]!='-'){
+            chdir(cmd->arg);
         }
-        write_state(state);
-        state->message = "226 Directory send OK.\n";
-        state->mode = NORMAL;
-        close(connection);
-        close(state->sock_pasv);
+        getcwd(cwd,BSIZE);
+        DIR *dp = opendir(cwd);
+        if(!dp){
+            state->message = "551 Failed to open directory.\n";
+        }else{
+            if(state->mode == SERVER){
+                connection = accept_connection(state->sock_pasv);
+                state->message = "150 Here comes the directory listing.\n";
+                puts(state->message);
 
-      }else if(state->mode == CLIENT){
-        state->message = "502 Command not implemented.\n";
-      }else{
-        state->message = "425 Use PASV or PORT first.\n";
-      }
+                while(entry=readdir(dp)){
+                    if(stat(entry->d_name,&statbuf)==-1){
+                        fprintf(stderr, "FTP: Error reading file stats...\n");
+                    }else{
+                        char *perms = malloc(9);
+                        memset(perms,0,9);
+
+                        /* Convert time_t to tm struct */
+                        rawtime = statbuf.st_mtime;
+                        time = localtime(&rawtime);
+                        strftime(timebuff,80,"%b %d %H:%M",time);
+                        str_perm((statbuf.st_mode & ALLPERMS), perms);
+                        dprintf(connection,
+                            "%c%s %5d %4d %4d %8d %s %s\r\n",
+                            (entry->d_type==DT_DIR)?'d':'-',
+                            perms,
+                            statbuf.st_nlink,
+                            statbuf.st_uid,
+                            statbuf.st_gid,
+                            statbuf.st_size,
+                            timebuff,
+                            entry->d_name);
+                    }
+                }
+                write_state(state);
+                state->message = "226 Directory send OK.\n";
+                state->mode = NORMAL;
+                close(connection);
+                close(state->sock_pasv);
+            }else if(state->mode == CLIENT){
+
+                state->message = "150 Here comes the directory listing.\n";
+                while(entry=readdir(dp)){
+                    if(stat(entry->d_name,&statbuf)==-1){
+                        fprintf(stderr, "FTP: Error reading file stats...\n");
+                    }else{
+                        char *perms = malloc(9);
+                        memset(perms,0,9);
+                        /* Convert time_t to tm struct */
+                        rawtime = statbuf.st_mtime;
+                        time = localtime(&rawtime);
+                        strftime(timebuff,80,"%b %d %H:%M",time);
+                        str_perm((statbuf.st_mode & ALLPERMS), perms);
+                        dprintf(state->sock_port,
+                            "%c%s %5d %4d %4d %8d %s %s\r\n",
+                            (entry->d_type==DT_DIR)?'d':'-',
+                            perms,
+                            statbuf.st_nlink,
+                            statbuf.st_uid,
+                            statbuf.st_gid,
+                            statbuf.st_size,
+                            timebuff,
+                            entry->d_name);
+                    }
+                }
+                write_state(state);
+                state->message = "226 Directory send OK.\n";
+                state->mode = NORMAL;
+                close(state->sock_port);
+            }else{
+                state->message = "425 Use PASV or PORT first.\n";
+            }
+        }
+        closedir(dp);
+        chdir(cwd_orig);
+    }else{
+        state->message = "530 Please login with USER and PASS.\n";
     }
-    closedir(dp);
-    chdir(cwd_orig);
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-  }
-  state->mode = NORMAL;
-  write_state(state);
+    state->mode = NORMAL;
+    write_state(state);
 }
 
 
@@ -386,19 +399,20 @@ void ftp_abor(State *state)
 /* TYPE */
 void ftp_type(Command *cmd,State *state)
 {
-  if(state->logged_in){
-    if(cmd->arg[0]=='I'){
-      state->message = "200 Switching to Binary mode.\n";
-    }else if(cmd->arg[0]=='A'){
-
-      state->message = "200 Switching to ASCII mode.\n";
+    if(state->logged_in){
+        if(cmd->arg[0]=='I'){
+            state->message = "200 Switching to Binary mode.\n";
+            state->type = 0;
+        }else if(cmd->arg[0]=='A'){
+            state->message = "200 Switching to ASCII mode.\n";
+            state->type = 1;
+        }else{
+            state->message = "504 Command not implemented for that parameter.\n";
+        }
     }else{
-      state->message = "504 Command not implemented for that parameter.\n";
+        state->message = "530 Please login with USER and PASS.\n";
     }
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-  }
-  write_state(state);
+    write_state(state);
 }
 
 /* CDUP */
@@ -459,7 +473,6 @@ void ftp_rmd(Command *cmd, State *state)
     }
   }
   write_state(state);
-
 }
 
 void ftp_size(Command *cmd, State *state)

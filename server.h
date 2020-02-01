@@ -28,18 +28,23 @@ typedef struct Port
 
 typedef struct State
 {
-  /* Connection mode: NORMAL, SERVER, CLIENT */
-  int mode;
-  /* Is user loggd in? */
-  int logged_in;
-  /* Is this username allowed? */
-  int username_ok;
-  char *username;
-  /* Response message to client e.g. 220 Welcome */
-  char *message;
-  /* Commander connection */
-  int connection;
-  int sock_pasv;
+    /* Connection mode: NORMAL, SERVER, CLIENT */
+    int32_t mode;
+    /* Is user loggd in? */
+    int32_t logged_in;
+    /* Is this username allowed? */
+    int32_t username_ok;
+    char *username;
+    /* Response message to client e.g. 220 Welcome */
+    char *message;
+    /* Commander connection */
+    int32_t connection;
+    /* PASV MOD*/
+    int32_t sock_pasv;
+    /* PORT MOD*/
+    int32_t sock_port;
+    /* Transport type 0-bin 1-ascii */
+    uint8_t type;
 } State;
 
 typedef struct Arg
@@ -93,7 +98,7 @@ int accept_connection(int);
 void *start_routine(void* arg);
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread);
 void ignore_pipe();
-int32_t conn_cli(char*, int);
+int32_t conn_cli(char*, uint16_t);
 
 /* void response(Command *, State *); */
 void ftp_user(Command *, State *);

@@ -60,6 +60,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
     strcat(welcome, "Welcome to FTP service.\n");
     write(connectfd, welcome, strlen(welcome));
 
+    state->type = 0;
     while(1){
         memset(buffer, 0, BSIZE);
         memset(cmd, 0, sizeof(*cmd));
@@ -67,7 +68,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
 
 		if(num <= 0) break;
 
-        printf("[%d] USER:%s COMMAND:[%s] recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
+        printf("[%ld] USER:%s COMMAND:[%s] recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
         parse_command(buffer,cmd);
         state->connection = connectfd;
 
@@ -151,26 +152,46 @@ void getip(int sock, int *ip)
     }
 }
 
-int32_t conn_cli(char* ip, int port)
+int32_t conn_cli(char* ip, uint16_t port)
 {
     int32_t ret = 0;
     int32_t fd;
     struct sockaddr_in server;
     do
     {
-        if((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
+        /* Bind client address*/
+        struct sockaddr_in cli_addr;
+        memset(&cli_addr, 0, sizeof(cli_addr));
+        cli_addr.sin_family = AF_INET;
+        cli_addr.sin_port = htons(20);
+        if((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
             fprintf(stderr, "FTP: Create socket error...\n");
             ret = -1;
             break;
         }
+        int32_t reuse = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int32_t));
+        if((bind(fd,(struct sockaddr*)&cli_addr,sizeof(cli_addr)))<0){
+            fprintf(stderr, "FTP: Can not bind...\n");
+            ret = -1;
+            break;
+        }
+
+        if((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+            fprintf(stderr, "FTP: Create socket error...\n");
+            ret = -1;
+            break;
+        }
+        ret = fd;
         memset(&server, 0, sizeof(server));
         server.sin_family = AF_INET;
         server.sin_port = htons(port);
         server.sin_addr.s_addr = inet_addr(ip);
-        ret = connect(fd, (struct sockaddr *)&server, sizeof(struct sockaddr));
-        if(ret < 0){
-            fprintf(stderr, "FTP: Connect error...\n");
+        int32_t c_ret = connect(fd, (struct sockaddr *)&server, sizeof(struct sockaddr));
+        if(c_ret < 0){
+            fprintf(stderr, "FTP: Connect error... c_ret=%d\n", c_ret);
             ret = -1;
+            close(fd);
             break;
         }
     }while(0);
