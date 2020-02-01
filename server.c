@@ -54,7 +54,7 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
     State *state = malloc(sizeof(State));
     memset(buffer,0,BSIZE);
 
-	int tid = pthread_self();
+    int64_t tid = pthread_self();
 
     char welcome[BSIZE] = "220 ";
     strcat(welcome, "Welcome to FTP service.\n");
@@ -139,7 +139,7 @@ int accept_connection(int socket)
     return accept(socket,(struct sockaddr*) &client_address,&addrlen);
 }
 
-void getip(int sock, int *ip)
+void getip(int32_t sock, int32_t *ip)
 {
     socklen_t addr_size = sizeof(struct sockaddr_in);
     struct sockaddr_in addr;
@@ -163,7 +163,7 @@ int32_t conn_cli(char* ip, uint16_t port)
         struct sockaddr_in cli_addr;
         memset(&cli_addr, 0, sizeof(cli_addr));
         cli_addr.sin_family = AF_INET;
-        cli_addr.sin_port = htons(20);
+        cli_addr.sin_port = htons(DATAPORT);
         if((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
             fprintf(stderr, "FTP: Create socket error...\n");
             ret = -1;
@@ -198,7 +198,8 @@ int32_t conn_cli(char* ip, uint16_t port)
     return ret;
 }
 
-int lookup_cmd(char *cmd){
+int lookup_cmd(char *cmd)
+{
     const int cmdlist_count = sizeof(cmdlist_str)/sizeof(char *);
     return lookup(cmd, cmdlist_str, cmdlist_count);
 }

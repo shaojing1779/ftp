@@ -18,6 +18,7 @@
 #include <sys/utsname.h>
 
 #define BSIZE 1024
+#define DATAPORT 20
 #endif
 
 typedef struct Port
@@ -90,15 +91,19 @@ static const char *usernames[] = {"ftp", "anonymous","lab"};
 
 /* Server functions */
 void gen_port(Port *);
+void getip(int32_t, int32_t*);
 void parse_command(char *, Command *);
 int create_socket(int port);
 void write_state(State *);
 int accept_connection(int);
 /*Thread functions*/
-void *start_routine(void* arg);
-void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread);
+void *start_routine(void*);
+void process_cli(int, struct sockaddr_in, pthread_t);
 void ignore_pipe();
 int32_t conn_cli(char*, uint16_t);
+int32_t lookup_cmd(char*);
+int32_t lookup(char*, const char**, int);
+uint32_t inet_addr(char*);
 
 /* void response(Command *, State *); */
 void ftp_user(Command *, State *);

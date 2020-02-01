@@ -136,7 +136,7 @@ void ftp_list(Command *cmd, State *state)
                         strftime(timebuff,80,"%b %d %H:%M",time);
                         str_perm((statbuf.st_mode & ALLPERMS), perms);
                         dprintf(connection,
-                            "%c%s %5d %4d %4d %8d %s %s\r\n",
+                            "%c%s %5ld %4d %4d %8ld %s %s\r\n",
                             (entry->d_type==DT_DIR)?'d':'-',
                             perms,
                             statbuf.st_nlink,
@@ -167,7 +167,7 @@ void ftp_list(Command *cmd, State *state)
                         strftime(timebuff,80,"%b %d %H:%M",time);
                         str_perm((statbuf.st_mode & ALLPERMS), perms);
                         dprintf(state->sock_port,
-                            "%c%s %5d %4d %4d %8d %s %s\r\n",
+                            "%c%s %5ld %4d %4d %8ld %s %s\r\n",
                             (entry->d_type==DT_DIR)?'d':'-',
                             perms,
                             statbuf.st_nlink,
@@ -195,11 +195,10 @@ void ftp_list(Command *cmd, State *state)
     write_state(state);
 }
 
-
 /* QUIT */
 void ftp_quit(State *state)
 {
-  state->message = "221 Goodbye, friend. I never thought I'd die like this.\n";
+  state->message = "221 Goodbye!\n";
   write_state(state);
   close(state->connection);
   pthread_exit(NULL);
@@ -265,7 +264,7 @@ void ftp_mkd(Command *cmd, State *state)
     }
     else{
       if(mkdir(cmd->arg,S_IRWXU)==0){
-        sprintf(res,"257 \"%s/%s\" new directory created.\n",cwd,cmd->arg);
+        sprintf(res,"257 \"%s/%s\" new directory created.\n", cwd, cmd->arg);
         state->message = res;
       }else{
         state->message = "550 Failed to create directory.\n";
@@ -280,107 +279,132 @@ void ftp_mkd(Command *cmd, State *state)
 /* RETR */
 void ftp_retr(Command *cmd, State *state)
 {
-
-  if(fork()==0){
-    int connection;
-    int fd;
+    int32_t fd;
     struct stat stat_buf;
     off_t offset = 0;
-    int sent_total = 0;
+    ssize_t sent_total = 0;
     if(state->logged_in){
 
-      /* Passive mode */
-      if(state->mode == SERVER){
-        if(access(cmd->arg,R_OK)==0 && (fd = open(cmd->arg,O_RDONLY))){
-          fstat(fd,&stat_buf);
-          
-          state->message = "150 Opening BINARY mode data connection.\n";
-          
-          write_state(state);
-          
-          connection = accept_connection(state->sock_pasv);
-          close(state->sock_pasv);
-          if(sent_total = sendfile(connection, fd, &offset, stat_buf.st_size)){
-            
-            if(sent_total != stat_buf.st_size){
-              perror("ftp_retr:sendfile");
-              pthread_exit(NULL);
+        if(state->mode == SERVER) {
+            int32_t connection = -1;
+            if(access(cmd->arg,R_OK)==0 && (fd = open(cmd->arg,O_RDONLY))){
+                fstat(fd,&stat_buf);
+                state->message = "150 Opening BINARY mode data connection.\n";
+                write_state(state);
+                connection = accept_connection(state->sock_pasv);
+                close(state->sock_pasv);
+                if(sent_total = sendfile(connection, fd, &offset, stat_buf.st_size)){
+
+                    if(sent_total != stat_buf.st_size){
+                        perror("ftp_retr:sendfile");
+                        pthread_exit(NULL);
+                    }
+
+                    state->message = "226 File send OK.\n";
+                }else{
+                    state->message = "550 Failed to read file.\n";
+                }
+            }else{
+                state->message = "550 Failed to get file\n";
             }
+            close(connection);
+            close(state->sock_pasv);
+        } else if(state->mode == CLIENT) {
+            if(access(cmd->arg,R_OK)==0 && (fd = open(cmd->arg,O_RDONLY))){
+                fstat(fd,&stat_buf);
+                state->message = "150 Opening BINARY mode data connection..\n";
+                write_state(state);
+                if(sent_total = sendfile(state->sock_port, fd, &offset, stat_buf.st_size)){
 
-            state->message = "226 File send OK.\n";
-          }else{
-            state->message = "550 Failed to read file.\n";
-          }
-        }else{
-          state->message = "550 Failed to get file\n";
+                    if(sent_total != stat_buf.st_size){
+                        perror("ftp_retr:sendfile");
+                        pthread_exit(NULL);
+                    }
+                    state->message = "226 File send OK.\n";
+                }else{
+                    state->message = "550 Failed to read file.\n";
+                }
+            }else{
+                state->message = "550 Failed to get file\n";
+            }
+            close(state->sock_port);
+        } else{
+            state->message = "550 Use PASV or PORT first.\n";
         }
-      }else{
-        state->message = "550 Please use PASV instead of PORT.\n";
-      }
     }else{
-      state->message = "530 Please login with USER and PASS.\n";
+        state->message = "530 Please login with USER and PASS.\n";
     }
-
     close(fd);
-    close(connection);
     write_state(state);
-    pthread_exit(NULL);
-  }
-  state->mode = NORMAL;
-  close(state->sock_pasv);
+    state->mode = NORMAL;
 }
 
 /* STOR */
 void ftp_stor(Command *cmd, State *state)
 {
-  if(fork()==0){
-    int connection, fd;
-    off_t offset = 0;
-    int pipefd[2];
-    int res = 1;
+    int32_t fd;
     const int buff_size = 8192;
-
     FILE *fp = fopen(cmd->arg,"w");
-
     if(fp==NULL){
-      perror("ftp_stor:fopen");
+        perror("ftp_stor:fopen");
     }else if(state->logged_in){
-      if(!(state->mode==SERVER)){
-        state->message = "550 Please use PASV instead of PORT.\n";
-      }
-      /* Passive mode */
-      else{
-        fd = fileno(fp);
-        connection = accept_connection(state->sock_pasv);
-        close(state->sock_pasv);
-        if(pipe(pipefd)==-1)perror("ftp_stor: pipe");
+        if(state->mode == SERVER) {
+            int32_t res = 0;
+            int32_t pipefd[2];
+            fd = fileno(fp);
+            int32_t connection = accept_connection(state->sock_pasv);
+            close(state->sock_pasv);
+            if(pipe(pipefd)==-1)
+                perror("ftp_stor: pipe");
 
-        state->message = "125 Data connection already open; transfer starting.\n";
-        write_state(state);
+            state->message = "125 Data connection already open; transfer starting.\n";
+            write_state(state);
 
-        while ((res = splice(connection, 0, pipefd[1], NULL, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE))>0){
-          splice(pipefd[0], NULL, fd, 0, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE);
+            while ((res = splice(connection, 0, pipefd[1], NULL, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE))>0) {
+                splice(pipefd[0], NULL, fd, 0, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE);
+            }
+
+            if(res==-1) {
+                perror("ftp_stor: splice");
+                pthread_exit(NULL);
+            }else{
+                state->message = "226 File send OK.\n";
+            }
+            close(connection);
+            close(state->sock_pasv);
+
+        } else if(state->mode == CLIENT) {
+            int32_t res = 0;
+            int32_t pipefd[2];
+            fd = fileno(fp);
+            if(pipe(pipefd)==-1)
+                perror("ftp_stor: pipe");
+            printf("DEBUG CLIENT socket=%d, fd=%d\n", state->sock_port, fd);
+            state->message = "125 Data connection already open; transfer starting.\n";
+            write_state(state);
+
+            while ((res = splice(state->sock_port, 0, pipefd[1], NULL, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE))>0) {
+                printf("DEBUG res=%d", res);
+                splice(pipefd[0], NULL, fd, 0, buff_size, SPLICE_F_MORE | SPLICE_F_MOVE);
+            }
+
+            if(res==-1) {
+                perror("ftp_stor: splice");
+                pthread_exit(NULL);
+            }else{
+                state->message = "226 File send OK.\n";
+            }
+            close(state->sock_port);
+
+        } else {
+            state->message = "550 use PASV or PORT.\n";
         }
-
-        if(res==-1){
-          perror("ftp_stor: splice");
-          pthread_exit(NULL);
-        }else{
-          state->message = "226 File send OK.\n";
-        }
-        close(connection);
-        close(fd);
-      }
     }else{
-      state->message = "530 Please login with USER and PASS.\n";
+        state->message = "530 Please login with USER and PASS.\n";
     }
-    close(connection);
     write_state(state);
-    pthread_exit(NULL);
-  }
-  state->mode = NORMAL;
-  close(state->sock_pasv);
-
+    close(fd);
+    state->mode = NORMAL;
 }
 
 /* ABOR */
@@ -482,7 +506,7 @@ void ftp_size(Command *cmd, State *state)
     char filesize[128];
     memset(filesize,0,128);
     if(stat(cmd->arg,&statbuf)==0){
-      sprintf(filesize, "213 %d\n", statbuf.st_size);
+      sprintf(filesize, "213 %ld\n", statbuf.st_size);
       state->message = filesize;
     }else{
       state->message = "550 Could not get file size.\n";
@@ -497,26 +521,24 @@ void ftp_size(Command *cmd, State *state)
 
 void str_perm(int perm, char *str_perm)
 {
-  int curperm = 0;
-  int flag = 0;
-  int read, write, exec;
-  
-  char fbuff[3];
+    int curperm = 0;
+    int flag = 0;
+    int read, write, exec;
 
-  read = write = exec = 0;
-  
-  int i;
-  for(i = 6; i>=0; i-=3){
-    curperm = ((perm & ALLPERMS) >> i ) & 0x7;
-    
-    memset(fbuff,0,3);
-    read = (curperm >> 2) & 0x1;
-    write = (curperm >> 1) & 0x1;
-    exec = (curperm >> 0) & 0x1;
+    char fbuff[3];
+    read = write = exec = 0;
 
-    sprintf(fbuff,"%c%c%c",read?'r':'-' ,write?'w':'-', exec?'x':'-');
-    strcat(str_perm,fbuff);
+    int i;
+    for(i = 6; i>=0; i-=3){
+        curperm = ((perm & ALLPERMS) >> i ) & 0x7;
 
-  }
+        memset(fbuff,0,3);
+        read = (curperm >> 2) & 0x1;
+        write = (curperm >> 1) & 0x1;
+        exec = (curperm >> 0) & 0x1;
+
+        sprintf(fbuff,"%c%c%c",read?'r':'-' ,write?'w':'-', exec?'x':'-');
+        strcat(str_perm,fbuff);
+    }
 }
 
