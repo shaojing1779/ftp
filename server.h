@@ -16,6 +16,8 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <sys/utsname.h>
+#include <sys/sendfile.h>
+
 
 #define BSIZE 1024
 #define DATAPORT 20

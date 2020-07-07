@@ -2,7 +2,7 @@
 
 void ftp_user(Command *cmd, State *state)
 {
-  const int total_usernames = sizeof(usernames)/sizeof(char *);
+    const int total_usernames = sizeof(usernames)/sizeof(char *);
   if(lookup(cmd->arg,usernames,total_usernames)>=0){
     state->username = malloc(32);
     memset(state->username,0,32);
@@ -226,20 +226,16 @@ void ftp_pwd(Command *cmd, State *state)
 /* CWD */
 void ftp_cwd(Command *cmd, State *state)
 {
-  if(state->logged_in){
-	printf("$HELLO\n");
-	printf("$CWD:%s\n",cmd->arg);
-	printf("$HELLO\n");
+    if(state->logged_in){
     if(chdir(cmd->arg)==0){
-      state->message = "250 Directory successfully changed.\n";
+        state->message = "250 Directory successfully changed.\n";
     }else{
-      state->message = "550 Failed to change directory.\n";
+        state->message = "550 Failed to change directory.\n";
     }
-  }else{
-    state->message = "500 Login with USER and PASS.\n";
-  }
-  write_state(state);
-
+    }else{
+        state->message = "500 Login with USER and PASS.\n";
+    }
+    write_state(state);
 }
 
 /* MKD command */
@@ -287,43 +283,62 @@ void ftp_retr(Command *cmd, State *state)
 
         if(state->mode == SERVER) {
             int32_t connection = -1;
-            if(access(cmd->arg,R_OK)==0 && (fd = open(cmd->arg,O_RDONLY))){
+            if(access(cmd->arg,R_OK)==0 && (fd = open64(cmd->arg,O_RDONLY))){
                 fstat(fd,&stat_buf);
                 state->message = "150 Opening BINARY mode data connection.\n";
                 write_state(state);
                 connection = accept_connection(state->sock_pasv);
                 close(state->sock_pasv);
-                if(sent_total = sendfile(connection, fd, &offset, stat_buf.st_size)){
+		do {
+                    ssize_t add_byte = sendfile(connection, fd, &offset, stat_buf.st_size);
+		    sent_total += add_byte;
+                    if(add_byte){
 
-                    if(sent_total != stat_buf.st_size){
-                        perror("ftp_retr:sendfile");
-                        pthread_exit(NULL);
+                        if(sent_total == stat_buf.st_size){
+		    	state->message = "226 File send OK.\n";
+		    	break;
+                        }
+
+                    }else{
+                        state->message = "550 Failed to read file.\n";
                     }
-
-                    state->message = "226 File send OK.\n";
-                }else{
-                    state->message = "550 Failed to read file.\n";
-                }
+		} while (sent_total != stat_buf.st_size);
             }else{
                 state->message = "550 Failed to get file\n";
             }
             close(connection);
             close(state->sock_pasv);
         } else if(state->mode == CLIENT) {
-            if(access(cmd->arg,R_OK)==0 && (fd = open(cmd->arg,O_RDONLY))){
+            if(access(cmd->arg,R_OK)==0 && (fd = open64(cmd->arg,O_RDONLY))){
                 fstat(fd,&stat_buf);
                 state->message = "150 Opening BINARY mode data connection..\n";
                 write_state(state);
+		do {
+                    ssize_t add_byte = sendfile(state->sock_port, fd, &offset, stat_buf.st_size);
+		    sent_total += add_byte;
+                    if(add_byte){
+
+                        if(sent_total == stat_buf.st_size){
+		    	state->message = "226 File send OK.\n";
+		    	break;
+                        }
+
+                    }else{
+                        state->message = "550 Failed to read file.\n";
+                    }
+		} while (sent_total != stat_buf.st_size);
+/*
                 if(sent_total = sendfile(state->sock_port, fd, &offset, stat_buf.st_size)){
 
                     if(sent_total != stat_buf.st_size){
-                        perror("ftp_retr:sendfile");
+                        perror("CLIENT ftp_retr:sendfile");
                         pthread_exit(NULL);
                     }
                     state->message = "226 File send OK.\n";
                 }else{
                     state->message = "550 Failed to read file.\n";
                 }
+*/
             }else{
                 state->message = "550 Failed to get file\n";
             }
@@ -424,6 +439,16 @@ void ftp_abor(State *state)
 void ftp_type(Command *cmd,State *state)
 {
     if(state->logged_in){
+	    
+	if(cmd->arg[0]=='A') {
+            state->message = "200 Switching to ASCII mode.\n";
+            state->type = 1;
+
+        } else {
+            state->message = "200 Switching to Binary mode.\n";
+            state->type = 0;
+        }
+	    /*
         if(cmd->arg[0]=='I'){
             state->message = "200 Switching to Binary mode.\n";
             state->type = 0;
@@ -433,6 +458,7 @@ void ftp_type(Command *cmd,State *state)
         }else{
             state->message = "504 Command not implemented for that parameter.\n";
         }
+	*/
     }else{
         state->message = "530 Please login with USER and PASS.\n";
     }
