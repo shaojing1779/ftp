@@ -3,28 +3,28 @@
 void ftp_user(Command *cmd, State *state)
 {
     const int total_usernames = sizeof(usernames)/sizeof(char *);
-  if(lookup(cmd->arg,usernames,total_usernames)>=0){
-    state->username = malloc(32);
-    memset(state->username,0,32);
-    strcpy(state->username,cmd->arg);
-    state->username_ok = 1;
-    state->message = "331 User name okay, need password\n";
-  }else{
-    state->message = "530 Invalid username\n";
-  }
-  write_state(state);
+    if(lookup(cmd->arg,usernames,total_usernames)>=0){
+        state->username = malloc(32);
+        memset(state->username,0,32);
+        strcpy(state->username,cmd->arg);
+        state->username_ok = 1;
+        state->message = "331 User name okay, need password\n";
+    }else{
+        state->message = "530 Invalid username\n";
+    }
+    write_state(state);
 }
 
 /* PASS */
 void ftp_pass(Command *cmd, State *state)
 {
-  if(state->username_ok==1){
-    state->logged_in = 1;
-    state->message = "230 Login successful\n";
-  }else{
-    state->message = "500 Invalid username or password\n";
-  }
-  write_state(state);
+    if(state->username_ok==1){
+        state->logged_in = 1;
+        state->message = "230 Login successful\n";
+    }else{
+        state->message = "500 Invalid username or password\n";
+    }
+    write_state(state);
 }
 
 /* PORT */
@@ -90,31 +90,27 @@ void ftp_pasv(Command *cmd, State *state)
     write_state(state);
 }
 
-/** LIST command */
+/** LIST */
 void ftp_list(Command *cmd, State *state)
 {
     if(state->logged_in==1){
         struct dirent *entry;
         struct stat statbuf;
         struct tm *time;
-        char timebuff[80], current_dir[BSIZE];
+        char timebuff[80];
         int connection;
         time_t rawtime;
-
-        /* TODO: dynamic buffering maybe? */
-        char cwd[BSIZE], cwd_orig[BSIZE];
-        memset(cwd,0,BSIZE);
-        memset(cwd_orig,0,BSIZE);
-
-        /* Later we want to go to the original path */
-        getcwd(cwd_orig,BSIZE);
-
-        /* Just chdir to specified path */
-        if(strlen(cmd->arg)>0&&cmd->arg[0]!='-'){
-            chdir(cmd->arg);
+        char *dest_dirt = (void*)malloc(strlen(state->cwd) + strlen(cmd->arg) + 2);
+        memset((void*)dest_dirt, 0 ,sizeof (dest_dirt));
+        if (strlen(cmd->arg) > 0) {
+            sprintf(dest_dirt, "%s/%s", state->cwd, cmd->arg);
+        }else {
+            strcpy(dest_dirt, state->cwd);
         }
-        getcwd(cwd,BSIZE);
-        DIR *dp = opendir(cwd);
+        char* orig_dict = (void*)malloc(strlen(state->cwd));
+        memset((void*)orig_dict, 0 ,sizeof (orig_dict));
+        printf("dest_dirt=%s, orig_dict=%s\n", dest_dirt, orig_dict);
+        DIR *dp = opendir(dest_dirt);
         if(!dp){
             state->message = "551 Failed to open directory.\n";
         }else{
@@ -125,7 +121,7 @@ void ftp_list(Command *cmd, State *state)
 
                 while(entry=readdir(dp)){
                     if(stat(entry->d_name,&statbuf)==-1){
-                        fprintf(stderr, "FTP: Error reading file stats...\n");
+                        fprintf(stderr, "SERVER FTP: Error reading file stats...\n");
                     }else{
                         char *perms = malloc(9);
                         memset(perms,0,9);
@@ -136,15 +132,15 @@ void ftp_list(Command *cmd, State *state)
                         strftime(timebuff,80,"%b %d %H:%M",time);
                         str_perm((statbuf.st_mode & ALLPERMS), perms);
                         dprintf(connection,
-                            "%c%s %5ld %4d %4d %8ld %s %s\r\n",
-                            (entry->d_type==DT_DIR)?'d':'-',
-                            perms,
-                            statbuf.st_nlink,
-                            statbuf.st_uid,
-                            statbuf.st_gid,
-                            statbuf.st_size,
-                            timebuff,
-                            entry->d_name);
+                                "%c%s %5ld %4d %4d %8ld %s %s\r\n",
+                                (entry->d_type==DT_DIR)?'d':'-',
+                                perms,
+                                statbuf.st_nlink,
+                                statbuf.st_uid,
+                                statbuf.st_gid,
+                                statbuf.st_size,
+                                timebuff,
+                                entry->d_name);
                     }
                 }
                 write_state(state);
@@ -157,7 +153,7 @@ void ftp_list(Command *cmd, State *state)
                 state->message = "150 Here comes the directory listing.\n";
                 while(entry=readdir(dp)){
                     if(stat(entry->d_name,&statbuf)==-1){
-                        fprintf(stderr, "FTP: Error reading file stats...\n");
+                        fprintf(stderr, "CLIENT FTP: Error reading file stats...\n");
                     }else{
                         char *perms = malloc(9);
                         memset(perms,0,9);
@@ -167,15 +163,15 @@ void ftp_list(Command *cmd, State *state)
                         strftime(timebuff,80,"%b %d %H:%M",time);
                         str_perm((statbuf.st_mode & ALLPERMS), perms);
                         dprintf(state->sock_port,
-                            "%c%s %5ld %4d %4d %8ld %s %s\r\n",
-                            (entry->d_type==DT_DIR)?'d':'-',
-                            perms,
-                            statbuf.st_nlink,
-                            statbuf.st_uid,
-                            statbuf.st_gid,
-                            statbuf.st_size,
-                            timebuff,
-                            entry->d_name);
+                                "%c%s %5ld %4d %4d %8ld %s %s\r\n",
+                                (entry->d_type==DT_DIR)?'d':'-',
+                                perms,
+                                statbuf.st_nlink,
+                                statbuf.st_uid,
+                                statbuf.st_gid,
+                                statbuf.st_size,
+                                timebuff,
+                                entry->d_name);
                     }
                 }
                 write_state(state);
@@ -187,7 +183,6 @@ void ftp_list(Command *cmd, State *state)
             }
         }
         closedir(dp);
-        chdir(cwd_orig);
     }else{
         state->message = "530 Please login with USER and PASS.\n";
     }
@@ -198,78 +193,118 @@ void ftp_list(Command *cmd, State *state)
 /* QUIT */
 void ftp_quit(State *state)
 {
-  state->message = "221 Goodbye!\n";
-  write_state(state);
-  close(state->connection);
-  pthread_exit(NULL);
+    state->message = "221 Goodbye!\n";
+    write_state(state);
+    close(state->connection);
+    pthread_exit(NULL);
 }
 
 /* PWD */
 void ftp_pwd(Command *cmd, State *state)
 {
-  if(state->logged_in){
-    char cwd[BSIZE];
-    char result[BSIZE];
-    memset(result, 0, BSIZE);
-    if(getcwd(cwd,BSIZE)!=NULL){
-      strcat(result,"257 \"");
-      strcat(result,cwd);
-      strcat(result,"\"\n");
-      state->message = result;
-    }else{
-      state->message = "550 Failed to get pwd.\n";
-    }
-    write_state(state);
-  }
-}
-
-/* CWD */
-void ftp_cwd(Command *cmd, State *state)
-{
     if(state->logged_in){
-    if(chdir(cmd->arg)==0){
-        state->message = "250 Directory successfully changed.\n";
-    }else{
-        state->message = "550 Failed to change directory.\n";
-    }
+        char *result = (char*)malloc(strlen(state->cwd) + 1);
+        memset(result, 0, strlen(state->cwd));
+        strcat(result,"257 \"");
+        strcat(result,state->cwd);
+        strcat(result,"\"\n");
+        state->message = result;
     }else{
         state->message = "500 Login with USER and PASS.\n";
     }
     write_state(state);
 }
 
-/* MKD command */
+/* CWD */
+void ftp_cwd(Command *cmd, State *state)
+{
+    if(state->logged_in){
+        do {
+            if (strlen(cmd->arg) > 0) {
+                printf("BEFO state->cwd|cmd->arg [%s|%s]\n", state->cwd, cmd->arg);
+
+                if (strlen(cmd->arg) == 2 && cmd->arg[0]=='.' && cmd->arg[1]=='.') {
+
+                    if (strcmp(state->cwd, "/") == 0) {
+                        state->message = "250 Directory successfully changed.\n";
+                        break;
+                    } else {
+                        char **dirs = split(state->cwd, "/");
+                        memset((void*)state->cwd, 0, sizeof (state->cwd));
+                        int del_index = 0;
+                        for (int i = 0; dirs[i] != NULL; i++) {
+                            del_index = i;
+                        }
+                        if (del_index <= 1) {
+                            sprintf(state->cwd, "/");
+                        }
+                        for (int i = 0; i < del_index; i++) {
+                            sprintf(state->cwd, "/%s", dirs[i]);
+                        }
+                        break;
+                    }
+                } else if (cmd->arg[0]=='/') {
+                    if (access(cmd->arg, F_OK|R_OK) <0 ) {
+                        state->message = "550 Failed to change directory.\n";
+                        break;
+                    }
+                    state->cwd = (void*)malloc(strlen(state->cwd) + 1);
+                    memset(state->cwd, 0, strlen(state->cwd));
+                    strcpy(state->cwd, cmd->arg);
+                    state->message = "250 Directory successfully changed.\n";
+                } else {
+                    char *chg_dir = (char*)malloc(strlen(cmd->arg) + strlen(state->cwd) + 2);
+                    memset(chg_dir,0,strlen(chg_dir));
+                    sprintf(chg_dir, "%s/%s",state->cwd, cmd->arg);
+                    if (access(chg_dir, F_OK|R_OK) <0 ) {
+                        state->message = "550 Failed to change directory.\n";
+                        break;
+                    }
+                    state->cwd = (void*)malloc(strlen(chg_dir) + 1);
+                    memset((void*)state->cwd, 0, sizeof(state->cwd));
+                    strcpy(state->cwd, chg_dir);
+                    state->message = "250 Directory successfully changed.\n";
+                }
+                printf("END state->cwd|cmd->arg [%s|%s]\n", state->cwd, cmd->arg);
+            }
+        } while(0);
+    }else{
+        state->message = "500 Login with USER and PASS.\n";
+    }
+    write_state(state);
+}
+
+/* MKD */
 void ftp_mkd(Command *cmd, State *state)
 {
-  if(state->logged_in){
-    char cwd[BSIZE];
-    char res[BSIZE];
-    memset(cwd,0,BSIZE);
-    memset(res,0,BSIZE);
-    getcwd(cwd,BSIZE);
-
-    if(cmd->arg[0]=='/'){
-      if(mkdir(cmd->arg,S_IRWXU)==0){
-        strcat(res,"257 \"");
-        strcat(res,cmd->arg);
-        strcat(res,"\" new directory created.\n");
-        state->message = res;
-      }else{
-        state->message = "550 Failed to create directory. Check path or permissions.\n";
-      }
+    if(state->logged_in){
+        char res[BSIZE];
+        memset(res,0,BSIZE);
+        if(cmd->arg[0]=='/'){
+            if(mkdir(cmd->arg,S_IRWXU)==0){
+                strcat(res,"257 \"");
+                strcat(res,cmd->arg);
+                strcat(res,"\" new directory created.\n");
+                state->message = res;
+            }else{
+                state->message = "550 Failed to create directory. Check path or permissions.\n";
+            }
+        }
+        else{
+            char* dest_dir = malloc(strlen(state->cwd) + strlen(cmd->arg) + 2);
+            memset(dest_dir, 0, sizeof (dest_dir));
+            sprintf(dest_dir, "%s/%s", state->cwd, cmd->arg);
+            if(mkdir(dest_dir,S_IRWXU)==0){
+                sprintf(res,"257 \"%s\" new directory created.\n", dest_dir);
+                state->message = res;
+            }else{
+                state->message = "550 Failed to create directory.\n";
+            }
+        }
+    }else{
+        state->message = "500 Good news, everyone! There's a report on TV with some very bad news!\n";
     }
-    else{
-      if(mkdir(cmd->arg,S_IRWXU)==0){
-        sprintf(res,"257 \"%s/%s\" new directory created.\n", cwd, cmd->arg);
-        state->message = res;
-      }else{
-        state->message = "550 Failed to create directory.\n";
-      }
-    }
-  }else{
-    state->message = "500 Good news, everyone! There's a report on TV with some very bad news!\n";
-  }
-  write_state(state);
+    write_state(state);
 }
 
 /* RETR */
@@ -280,7 +315,6 @@ void ftp_retr(Command *cmd, State *state)
     off_t offset = 0;
     ssize_t sent_total = 0;
     if(state->logged_in){
-
         if(state->mode == SERVER) {
             int32_t connection = -1;
             if(access(cmd->arg,R_OK)==0 && (fd = open64(cmd->arg,O_RDONLY))){
@@ -289,20 +323,20 @@ void ftp_retr(Command *cmd, State *state)
                 write_state(state);
                 connection = accept_connection(state->sock_pasv);
                 close(state->sock_pasv);
-		do {
+                do {
                     ssize_t add_byte = sendfile(connection, fd, &offset, stat_buf.st_size);
-		    sent_total += add_byte;
+                    sent_total += add_byte;
                     if(add_byte){
 
                         if(sent_total == stat_buf.st_size){
-		    	state->message = "226 File send OK.\n";
-		    	break;
+                            state->message = "226 File send OK.\n";
+                            break;
                         }
 
                     }else{
                         state->message = "550 Failed to read file.\n";
                     }
-		} while (sent_total != stat_buf.st_size);
+                } while (sent_total != stat_buf.st_size);
             }else{
                 state->message = "550 Failed to get file\n";
             }
@@ -313,32 +347,20 @@ void ftp_retr(Command *cmd, State *state)
                 fstat(fd,&stat_buf);
                 state->message = "150 Opening BINARY mode data connection..\n";
                 write_state(state);
-		do {
+                do {
                     ssize_t add_byte = sendfile(state->sock_port, fd, &offset, stat_buf.st_size);
-		    sent_total += add_byte;
+                    sent_total += add_byte;
                     if(add_byte){
 
                         if(sent_total == stat_buf.st_size){
-		    	state->message = "226 File send OK.\n";
-		    	break;
+                            state->message = "226 File send OK.\n";
+                            break;
                         }
 
                     }else{
                         state->message = "550 Failed to read file.\n";
                     }
-		} while (sent_total != stat_buf.st_size);
-/*
-                if(sent_total = sendfile(state->sock_port, fd, &offset, stat_buf.st_size)){
-
-                    if(sent_total != stat_buf.st_size){
-                        perror("CLIENT ftp_retr:sendfile");
-                        pthread_exit(NULL);
-                    }
-                    state->message = "226 File send OK.\n";
-                }else{
-                    state->message = "550 Failed to read file.\n";
-                }
-*/
+                } while (sent_total != stat_buf.st_size);
             }else{
                 state->message = "550 Failed to get file\n";
             }
@@ -425,13 +447,13 @@ void ftp_stor(Command *cmd, State *state)
 /* ABOR */
 void ftp_abor(State *state)
 {
-  if(state->logged_in){
-    state->message = "226 Closing data connection.\n";
-    state->message = "225 Data connection open; no transfer in progress.\n";
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-  }
-  write_state(state);
+    if(state->logged_in){
+        state->message = "226 Closing data connection.\n";
+        state->message = "225 Data connection open; no transfer in progress.\n";
+    }else{
+        state->message = "530 Please login with USER and PASS.\n";
+    }
+    write_state(state);
 
 }
 
@@ -439,8 +461,8 @@ void ftp_abor(State *state)
 void ftp_type(Command *cmd,State *state)
 {
     if(state->logged_in){
-	    
-	if(cmd->arg[0]=='A') {
+
+        if(cmd->arg[0]=='A') {
             state->message = "200 Switching to ASCII mode.\n";
             state->type = 1;
 
@@ -448,17 +470,6 @@ void ftp_type(Command *cmd,State *state)
             state->message = "200 Switching to Binary mode.\n";
             state->type = 0;
         }
-	    /*
-        if(cmd->arg[0]=='I'){
-            state->message = "200 Switching to Binary mode.\n";
-            state->type = 0;
-        }else if(cmd->arg[0]=='A'){
-            state->message = "200 Switching to ASCII mode.\n";
-            state->type = 1;
-        }else{
-            state->message = "504 Command not implemented for that parameter.\n";
-        }
-	*/
     }else{
         state->message = "530 Please login with USER and PASS.\n";
     }
@@ -468,17 +479,19 @@ void ftp_type(Command *cmd,State *state)
 /* CDUP */
 void ftp_cdup(Command *cmd, State *state) {
 
-  if(state->logged_in){
-    if(chdir("..")==0){
-      state->message = "250 Directory successfully changed.\n";
-    }else{
-      state->message = "550 Failed to change directory.\n";
-    }
-  }else{
-    state->message = "500 Login with USER and PASS.\n";
-  }
-  write_state(state);
-
+//    if(state->logged_in){
+//        if(chdir("..")==0){
+//            state->message = "250 Directory successfully changed.\n";
+//        }else{
+//            state->message = "550 Failed to change directory.\n";
+//        }
+//    }else{
+//        state->message = "500 Login with USER and PASS.\n";
+//    }
+//    write_state(state);
+    memset(cmd->arg, 0 , sizeof (cmd->arg));
+    strcpy(cmd->arg, "..");
+    ftp_cwd(cmd, state);
 }
 
 /* SYST */
@@ -498,50 +511,50 @@ void ftp_syst(State *state) {
 /* DELE */
 void ftp_dele(Command *cmd,State *state)
 {
-  if(state->logged_in){
-    if(unlink(cmd->arg)==-1){
-      state->message = "550 File unavailable.\n";
+    if(state->logged_in){
+        if(unlink(cmd->arg)==-1){
+            state->message = "550 File unavailable.\n";
+        }else{
+            state->message = "250 Requested file action okay, completed.\n";
+        }
     }else{
-      state->message = "250 Requested file action okay, completed.\n";
+        state->message = "530 Please login with USER and PASS.\n";
     }
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-  }
-  write_state(state);
+    write_state(state);
 }
 
 /* RMD */
 void ftp_rmd(Command *cmd, State *state)
 {
-  if(!state->logged_in){
-    state->message = "530 Please login first.\n";
-  }else{
-    if(rmdir(cmd->arg)==0){
-      state->message = "250 Requested file action okay, completed.\n";
+    if(!state->logged_in){
+        state->message = "530 Please login first.\n";
     }else{
-      state->message = "550 Cannot delete directory.\n";
+        if(rmdir(cmd->arg)==0){
+            state->message = "250 Requested file action okay, completed.\n";
+        }else{
+            state->message = "550 Cannot delete directory.\n";
+        }
     }
-  }
-  write_state(state);
+    write_state(state);
 }
 
 void ftp_size(Command *cmd, State *state)
 {
-  if(state->logged_in){
-    struct stat statbuf;
-    char filesize[128];
-    memset(filesize,0,128);
-    if(stat(cmd->arg,&statbuf)==0){
-      sprintf(filesize, "213 %ld\n", statbuf.st_size);
-      state->message = filesize;
+    if(state->logged_in){
+        struct stat statbuf;
+        char filesize[128];
+        memset(filesize,0,128);
+        if(stat(cmd->arg,&statbuf)==0){
+            sprintf(filesize, "213 %ld\n", statbuf.st_size);
+            state->message = filesize;
+        }else{
+            state->message = "550 Could not get file size.\n";
+        }
     }else{
-      state->message = "550 Could not get file size.\n";
+        state->message = "530 Please login with USER and PASS.\n";
     }
-  }else{
-    state->message = "530 Please login with USER and PASS.\n";
-  }
 
-  write_state(state);
+    write_state(state);
 
 }
 

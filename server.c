@@ -11,7 +11,7 @@ void server(int port)
     while(1){
         if ((connection = accept(sock, (struct sockaddr*) &client_address,&len)) == -1) {
             perror("accept Error\n");
-			continue;
+            continue;
         }
         Arg *arg = (void*)malloc(sizeof(Arg));
         arg->connfd = connection;
@@ -19,19 +19,48 @@ void server(int port)
         memcpy((void *)&arg->client, &client_address, sizeof(client_address));
         if (pthread_create(&thread, NULL, start_routine, (void*)arg)) {
             perror("Pthread_create() error");
-			continue;
+            continue;
         }
     }
 }
 /*Thread function*/
 void *start_routine(void* arg)
 {
-    Arg *info;
-    info = (Arg*)arg;
+    Arg *info = (void*)malloc(sizeof(arg));
+    memset((void*)info, 0, sizeof (info));
+    memcpy(info, arg, sizeof(arg));
     pthread_t thread = pthread_self();
     process_cli(info->connfd, info->client, thread);
     free(arg);
+    free(info);
 }
+
+/* split */
+char** split(char *str, char *delimiter) {
+    int len = strlen(str);
+    char *strCopy = (char*)malloc((len + 1) * sizeof(char));
+    strcpy(strCopy, str);
+    for (int i = 0; strCopy[i] != '\0'; i++) {
+        for (int j = 0; delimiter[j] != '\0'; j++) {
+            if (strCopy[i] == delimiter[j]) {
+                strCopy[i] = '\0';
+                break;
+            }
+        }
+    }
+    char** res = (char**)malloc((len + 2) * sizeof(char*));
+    len++;
+    int resI = 0;
+    for (int i = 0; i < len; i++) {
+        res[resI++] = strCopy + i;
+        while (strCopy[i] != '\0') {
+            i++;
+        }
+    }
+    res[resI] = NULL;
+    return res;
+}
+
 /*ignore pipe*/
 void ignore_pipe()
 {
@@ -44,7 +73,16 @@ void ignore_pipe()
     sigemptyset(&sig.sa_mask);
     sigaction(SIGPIPE,&sig,NULL);
 }
-
+/* init directroy */
+void init_directory(State *state)
+{
+    if (state->cwd != NULL && strlen(state->cwd) > 0) {
+        chdir(state->cwd);
+    } else {
+        state->cwd = "/";
+        chdir("/");
+    }
+}
 /*Process Request*/
 void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
 {
@@ -53,56 +91,62 @@ void process_cli(int connectfd, struct sockaddr_in client, pthread_t thread)
     Command *cmd = malloc(sizeof(Command));
     State *state = malloc(sizeof(State));
     memset(buffer,0,BSIZE);
-
     int64_t tid = pthread_self();
 
     char welcome[BSIZE] = "220 ";
     strcat(welcome, "Welcome to FTP service.\n");
     write(connectfd, welcome, strlen(welcome));
 
+    if(chdir(cmd->arg)==0){
+        state->cwd = cmd->arg;
+        state->message = "250 Directory successfully changed.\n";
+    }else{
+        state->message = "550 Failed to change directory.\n";
+    }
+    init_directory(state);
     state->type = 0;
     while(1){
         memset(buffer, 0, BSIZE);
         memset(cmd, 0, sizeof(*cmd));
         num = read(connectfd, buffer, BSIZE);
 
-		if(num <= 0) break;
+        if(num <= 0) break;
 
         printf("[%ld] USER:%s COMMAND:[%s] recv_size=%d\n", tid, (state->username==0)?"unknown":state->username, buffer, num);
         parse_command(buffer,cmd);
         state->connection = connectfd;
 
         switch(lookup_cmd(cmd->command)){
-            case USER: ftp_user(cmd,state); break;
-            case PASS: ftp_pass(cmd,state); break;
-            case PASV: ftp_pasv(cmd,state); break;
-            case PORT: ftp_port(cmd,state); break;
-            case LIST: ftp_list(cmd,state); break;
-            case CWD:  ftp_cwd(cmd,state); break;
-            case PWD:  ftp_pwd(cmd,state); break;
-            case MKD:  ftp_mkd(cmd,state); break;
-            case RMD:  ftp_rmd(cmd,state); break;
-            case RETR: ftp_retr(cmd,state); break;
-            case STOR: ftp_stor(cmd,state); break;
-            case DELE: ftp_dele(cmd,state); break;
-            case SIZE: ftp_size(cmd,state); break;
-            case ABOR: ftp_abor(state); break;
-            case QUIT: ftp_quit(state); break;
-            case TYPE: ftp_type(cmd,state); break;
-            case CDUP: ftp_cdup(cmd,state); break;
-            case SYST: ftp_syst(state); break;
-            case NOOP:
-                       if(state->logged_in){
-                           state->message = "200 Nice to NOOP you!\n";
-                       }else{
-                           state->message = "530 NOOB hehe.\n";
-                       }   
-                       write_state(state);
-                       break;
-            default: 
-                       state->message = "500 Unknown command\n";
-                       write_state(state);
-                       break;
+        case USER: ftp_user(cmd,state); break;
+        case PASS: ftp_pass(cmd,state); break;
+        case PASV: ftp_pasv(cmd,state); break;
+        case PORT: ftp_port(cmd,state); break;
+        case LIST: ftp_list(cmd,state); break;
+        case CWD:  ftp_cwd(cmd,state); break;
+        case PWD:  ftp_pwd(cmd,state); break;
+        case MKD:  ftp_mkd(cmd,state); break;
+        case RMD:  ftp_rmd(cmd,state); break;
+        case RETR: ftp_retr(cmd,state); break;
+        case STOR: ftp_stor(cmd,state); break;
+        case DELE: ftp_dele(cmd,state); break;
+        case SIZE: ftp_size(cmd,state); break;
+        case ABOR: ftp_abor(state); break;
+        case QUIT: ftp_quit(state); break;
+        case TYPE: ftp_type(cmd,state); break;
+        case CDUP: ftp_cdup(cmd,state); break;
+        case SYST: ftp_syst(state); break;
+        case NOOP:
+            if(state->logged_in){
+                state->message = "200 Nice to NOOP you!\n";
+            }else{
+                state->message = "530 NOOB hehe.\n";
+            }
+            write_state(state);
+            break;
+        default:
+            state->message = "500 Unknown command\n";
+            write_state(state);
+            break;
         }
     }
     close(connectfd);
@@ -246,13 +290,13 @@ int main(int argc, char *argv[])
     struct tm *timef = localtime(&t);
     printf("----------------------------------------------\n");
     printf("Date: %4d-%02d-%02d %d:%d:%d\n",
-            timef->tm_year+1900,
-            timef->tm_mon+1,
-            timef->tm_mday,
-            timef->tm_hour,
-            timef->tm_min,
-            timef->tm_sec
-          );
+           timef->tm_year+1900,
+           timef->tm_mon+1,
+           timef->tm_mday,
+           timef->tm_hour,
+           timef->tm_min,
+           timef->tm_sec
+           );
     struct passwd *pwd;
     pwd = getpwuid(getuid());
     printf("User: %s\n", pwd->pw_name);
@@ -260,7 +304,7 @@ int main(int argc, char *argv[])
     printf("----------------------------------------------\n");
     ignore_pipe();
     server(port);
-	
+
     return 0;
 }
 

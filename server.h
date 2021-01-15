@@ -25,8 +25,8 @@
 
 typedef struct Port
 {
-  int p1;
-  int p2;
+    int p1;
+    int p2;
 } Port;
 
 typedef struct State
@@ -48,6 +48,8 @@ typedef struct State
     int32_t sock_port;
     /* Transport type 0-bin 1-ascii */
     uint8_t type;
+    /* Local Directory */
+    char *cwd;
 } State;
 
 typedef struct Arg
@@ -60,8 +62,8 @@ typedef struct Arg
 /* Command struct */
 typedef struct Command
 {
-  char command[5];
-  char arg[BSIZE];
+    char command[5];
+    char arg[BSIZE];
 } Command;
 
 /**
@@ -75,21 +77,20 @@ typedef enum conn_mode{ NORMAL, SERVER, CLIENT }conn_mode;
 /* Commands enumeration */
 typedef enum cmdlist 
 { 
-  ABOR, CWD, DELE, LIST, MDTM, MKD, NLST, PASS, PASV,
-  PORT, PWD, QUIT, RETR, RMD, RNFR, RNTO, SITE, SIZE,
-  STOR, TYPE, CDUP, USER, NOOP, SYST
+    ABOR, CWD, DELE, LIST, MDTM, MKD, NLST, PASS, PASV,
+    PORT, PWD, QUIT, RETR, RMD, RNFR, RNTO, SITE, SIZE,
+    STOR, TYPE, CDUP, USER, NOOP, SYST
 } cmdlist;
 
 /* String mappings for cmdlist */
 static const char *cmdlist_str[] = 
 {
-  "ABOR", "CWD", "DELE", "LIST", "MDTM", "MKD", "NLST", "PASS", "PASV",
-  "PORT", "PWD", "QUIT", "RETR", "RMD", "RNFR", "RNTO", "SITE", "SIZE",
-  "STOR", "TYPE", "CDUP", "USER", "NOOP", "SYST"
+    "ABOR", "CWD", "DELE", "LIST", "MDTM", "MKD", "NLST", "PASS", "PASV",
+    "PORT", "PWD", "QUIT", "RETR", "RMD", "RNFR", "RNTO", "SITE", "SIZE",
+    "STOR", "TYPE", "CDUP", "USER", "NOOP", "SYST"
 };
 /* User nome */
 static const char *usernames[] = {"ftp", "anonymous","lab"};
-
 
 /* Server functions */
 void gen_port(Port *);
@@ -106,6 +107,7 @@ int32_t conn_cli(char*, uint16_t);
 int32_t lookup_cmd(char*);
 int32_t lookup(char*, const char**, int);
 uint32_t inet_addr(char*);
+char** split(char*, char*);
 
 /* void response(Command *, State *); */
 void ftp_user(Command *, State *);
